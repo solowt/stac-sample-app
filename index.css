@@ -1,0 +1,18 @@
+calcite-pagination {
+  margin-left: auto;
+  margin-right: auto;
+  width: auto;
+}
+
+calcite-panel[closed] {
+  display: none;
+}
+
+.item-preview-image {
+  display: block;
+  width: 200px;
+  height: 150px;
+  max-width: 100%;
+  margin: 0 auto 1rem;
+  object-fit: contain;
+}

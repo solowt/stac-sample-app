@@ -3,20 +3,38 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <link rel="stylesheet" href="https://js.arcgis.com/calcite-components/5.0.2/calcite.css" />
+    <link rel="stylesheet" href="./index.css" />
     <script type="module" src="https://js.arcgis.com/5.0/"></script>
   </head>
   <body>
     <calcite-shell>
-      <calcite-shell-panel slot="panel-start" position="start" id="shell-panel-start">
+      <calcite-shell-panel slot="panel-start" width-scale="l" position="start" id="shell-panel-start">
         <calcite-action-bar slot="action-bar">
           <calcite-action active icon="collection" text="Collections" text-enabled></calcite-action>
           <calcite-action icon="search" text="Search" text-enabled></calcite-action>
         </calcite-action-bar>
-        <calcite-panel heading="Collections" loading id="panel-start">
+        <calcite-panel heading="Collections" loading id="collections-panel">
+        </calcite-panel>
+        <calcite-panel heading="Item" loading id="item-panel" closable closed>
+          <calcite-fab
+            id="item-layer-fab"
+            slot="fab"
+            hidden
+            icon="plus"
+            label="Add imagery layer"
+            scale="s"
+            text="Add"
+            text-enabled>
+          </calcite-fab>
+          <div id="item-panel-content"></div>
+        </calcite-panel>
+        <calcite-panel heading="Search" id="search-panel" closed>
         </calcite-panel>
       </calcite-shell-panel>
       <calcite-panel heading="STAC Integration Test App">
-        <arcgis-scene ground="world-elevation" basemap="satellite" center="-154.88, 19.46" zoom="15" popup-component-enabled></arcgis-scene>
+        <arcgis-scene ground="world-elevation" basemap="satellite" center="-154.88, 19.46" zoom="15" popup-component-enabled>
+          <arcgis-layer-list slot="top-right"></arcgis-layer-list>
+        </arcgis-scene>
       </calcite-panel>
     </calcite-shell>
   </body>
