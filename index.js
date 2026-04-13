@@ -4,7 +4,6 @@ const shellcollectionsPanel = document.getElementById("shell-panel-start");
 const collectionsPanel = document.getElementById("collections-panel");
 const itemPanel = document.getElementById("item-panel");
 const itemPanelContent = document.getElementById("item-panel-content");
-const itemLayerFab = document.getElementById("item-layer-fab");
 const searchPanel = document.getElementById("search-panel");
 const actionsStart = shellcollectionsPanel?.querySelectorAll("calcite-action");
 
@@ -80,12 +79,9 @@ function setLoading(isLoading) {
 // JSAPI imports & set up
 
 const sceneEl = document.querySelector("arcgis-scene");
-const [ImageryTileLayer, Graphic, WebTileLayer, Extent, SpatialReference] = await $arcgis.import([
+const [ImageryTileLayer, Graphic] = await $arcgis.import([
   "@arcgis/core/layers/ImageryTileLayer.js",
-  "@arcgis/core/Graphic.js",
-  "@arcgis/core/layers/WebTileLayer.js",
-  "@arcgis/core/geometry/Extent.js",
-  "@arcgis/core/geometry/SpatialReference.js"
+  "@arcgis/core/Graphic.js"
 ]);
 await sceneEl.viewOnReady();
 const scene = sceneEl.view;
@@ -94,11 +90,16 @@ let currentItemPageGraphics = [];
 let currentItemPageCollectionItem = null;
 let currentSelectedItemFeature = null;
 let currentSelectedItemGraphic = null;
-let currentRenderedItem = null;
 
 // search and render logic
 
+// CAPELLA OPEN DATA API AND HELPS
+const CAPELLA_API_URL = "https://capella-open-data.s3.us-west-2.amazonaws.com/stac";
+
+
+// MICROSOFT PLANETARY COMPUTER STAC API ENDPOINTS AND HELPERS
 const API_URL = "https://planetarycomputer.microsoft.com/api/stac/v1";
+const TOKEN_URL = "https://planetarycomputer.microsoft.com/api/sas/v1";
 const COLLECTIONS_URL = `${API_URL}/collections`;
 const COLLECTION_URL = `${COLLECTIONS_URL}/landsat-c2-l2`;
 const ITEMS_URL = `${COLLECTION_URL}/items`;
@@ -175,34 +176,28 @@ function normalizeHref(href) {
   }
 }
 
-function getItemImageryLayerUrl(item) {
-  return normalizeHref(item?.assets?.data?.href);
+function getAssetHref(asset) {
+  return normalizeHref(asset?.href);
 }
 
-function getItemWebTileJsonUrl(item) {
-  return normalizeHref(item?.assets?.tilejson?.href || item?.assets?.tilejson);
+function isTiffAsset(asset) {
+  return Boolean(getAssetHref(asset)) && asset?.type?.toLowerCase().includes("image/tiff");
 }
 
-function getItemLayerSource(item) {
-  const imageryUrl = getItemImageryLayerUrl(item);
+function getAssetDescription(asset) {
+  return formatDisplayValue(asset?.description || asset?.type || asset?.href);
+}
 
-  if (imageryUrl) {
-    return {
-      type: "imagery",
-      key: imageryUrl
-    };
+function getAssetLayerSource(asset) {
+  const href = getAssetHref(asset);
+
+  if (!href) {
+    return null;
   }
 
-  const tileJsonUrl = getItemWebTileJsonUrl(item);
-
-  if (tileJsonUrl) {
-    return {
-      type: "web-tile",
-      key: tileJsonUrl
-    };
-  }
-
-  return null;
+  return {
+    key: href
+  };
 }
 
 function findAddedItemLayer(source) {
@@ -217,43 +212,21 @@ function findAddedItemLayer(source) {
       return true;
     }
 
-    if (source.type === "imagery") {
-      return normalizeHref(layer.url) === source.key;
-    }
-
-    return false;
+    const layerUrl = normalizeHref(layer.url);
+    return layerUrl === source.key || layerUrl?.startsWith(`${source.key}?`);
   }) || null;
 }
 
-function updateItemLayerFab(item = currentRenderedItem) {
-  currentRenderedItem = item || null;
+function updateAssetAction(action) {
+  const sourceKey = action.dataset.assetHref;
 
-  if (!itemLayerFab) {
+  if (!sourceKey) {
     return;
   }
 
-  const layerSource = getItemLayerSource(currentRenderedItem);
-
-  itemLayerFab.loading = false;
-
-  if (!layerSource) {
-    itemLayerFab.hidden = true;
-    itemLayerFab.disabled = true;
-    delete itemLayerFab.dataset.layerUrl;
-    delete itemLayerFab.dataset.layerType;
-    return;
-  }
-
-  const existingLayer = findAddedItemLayer(layerSource);
-  const layerLabel = layerSource.type === "web-tile" ? "web tile layer" : "imagery layer";
-
-  itemLayerFab.hidden = false;
-  itemLayerFab.disabled = false;
-  itemLayerFab.dataset.layerUrl = layerSource.key;
-  itemLayerFab.dataset.layerType = layerSource.type;
-  itemLayerFab.icon = existingLayer ? "minus" : "plus";
-  itemLayerFab.label = existingLayer ? `Remove ${layerLabel}` : `Add ${layerLabel}`;
-  itemLayerFab.text = existingLayer ? "Remove" : "Add";
+  const existingLayer = findAddedItemLayer({ key: sourceKey });
+  action.icon = existingLayer ? "minus" : "plus";
+  action.label = existingLayer ? "Remove imagery layer" : "Add imagery layer";
 }
 
 function removeAddedItemLayer(source) {
@@ -268,34 +241,14 @@ function removeAddedItemLayer(source) {
   return true;
 }
 
-itemLayerFab?.addEventListener("click", async event => {
-  event.stopPropagation();
-
-  const item = currentRenderedItem;
-  const layerSource = getItemLayerSource(item);
-
-  if (!item || !layerSource || !scene.map || itemLayerFab.loading) {
-    return;
-  }
-
-  itemLayerFab.loading = true;
-  itemLayerFab.disabled = true;
-
-  try {
-    if (!removeAddedItemLayer(layerSource)) {
-      await addCogToMap(item);
-    }
-  } catch (error) {
-    console.error(error);
-  } finally {
-    updateItemLayerFab(item);
-  }
-});
+function syncAssetListActions() {
+  itemPanelContent
+    ?.querySelectorAll("calcite-action[data-asset-href]")
+    .forEach(updateAssetAction);
+}
 
 scene.map?.layers?.on("change", () => {
-  if (currentRenderedItem) {
-    updateItemLayerFab(currentRenderedItem);
-  }
+  syncAssetListActions();
 });
 
 function isCollectionsPanelVisible() {
@@ -474,6 +427,70 @@ function createReadOnlyListItem(label, description) {
   return item;
 }
 
+function createAssetListItem(assetKey, asset, item) {
+  const itemElement = createReadOnlyListItem(asset.title || assetKey, getAssetDescription(asset));
+
+  if (!isTiffAsset(asset)) {
+    return itemElement;
+  }
+
+  const action = document.createElement("calcite-action");
+  const layerSource = getAssetLayerSource(asset);
+
+  if (!layerSource) {
+    return itemElement;
+  }
+
+  action.slot = "actions-end";
+  action.dataset.assetHref = layerSource.key;
+  action.scale = "s";
+  updateAssetAction(action);
+
+  action.addEventListener("click", async event => {
+    event.stopPropagation();
+
+    if (action.disabled || !scene.map) {
+      return;
+    }
+
+    action.disabled = true;
+
+    try {
+      if (!removeAddedItemLayer(layerSource)) {
+        await addAssetToMap(item, asset, assetKey);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      action.disabled = false;
+      updateAssetAction(action);
+    }
+  });
+
+  itemElement.append(action);
+  return itemElement;
+}
+
+function createAssetList(item) {
+  const assetEntries = Object.entries(item.assets ?? {});
+  const assetList = document.createElement("calcite-list");
+  const assetsGroup = document.createElement("calcite-list-item-group");
+
+  assetList.className = "item-assets-list";
+  assetList.label = `${item.id || "Item"} assets`;
+  assetList.interactionMode = "static";
+
+  assetsGroup.heading = `Assets (${assetEntries.length})`;
+  assetsGroup.replaceChildren(
+    ...(assetEntries.length
+      ? assetEntries.map(([assetKey, asset]) => createAssetListItem(assetKey, asset, item))
+      : [createMessageListItem("No assets found", "This item does not include assets.")])
+  );
+
+  assetList.replaceChildren(assetsGroup);
+  return assetList;
+}
+
 function renderItem(item) {
   const thumbnailLink = item.assets?.rendered_preview?.href || getLinkHref(item.links, "preview");
   const img = document.createElement("img");
@@ -485,8 +502,8 @@ function renderItem(item) {
 
   const itemDetailsList = document.createElement("calcite-list");
   const detailsGroup = document.createElement("calcite-list-item-group");
-  const assetsGroup = document.createElement("calcite-list-item-group");
   const assetEntries = Object.entries(item.assets ?? {});
+  const assetList = createAssetList(item);
 
   itemPanel.heading = item.id || "Item";
   itemPanel.description = item.collection || "";
@@ -504,19 +521,9 @@ function renderItem(item) {
     createReadOnlyListItem("Assets", String(assetEntries.length))
   );
 
-  assetsGroup.heading = `Assets (${assetEntries.length})`;
-  assetsGroup.replaceChildren(
-    ...(assetEntries.length
-      ? assetEntries.map(([assetKey, asset]) => createReadOnlyListItem(
-        asset.title || assetKey,
-        formatDisplayValue(asset.href || asset.type)
-      ))
-      : [createMessageListItem("No assets found", "This item does not include assets.")])
-  );
-
-  itemDetailsList.replaceChildren(detailsGroup, assetsGroup);
-  updateItemLayerFab(item);
-  itemPanelContent.replaceChildren(...(thumbnailLink ? [img] : []), itemDetailsList);
+  itemDetailsList.replaceChildren(detailsGroup);
+  itemPanelContent.replaceChildren(...(thumbnailLink ? [img] : []), itemDetailsList, assetList);
+  syncAssetListActions();
   itemPanel.scrollContentTo({ top: 0 });
 }
 
@@ -533,7 +540,6 @@ function createStacItemListItem(stacItem, collection) {
     showStartPanel(itemPanel, collectionsPanel);
     itemPanel.heading = stacItem.id || "Item";
     itemPanel.description = collection.id || "";
-    updateItemLayerFab(null);
     itemPanelContent.replaceChildren();
     setPanelLoading(itemPanel, true);
 
@@ -671,6 +677,26 @@ function createCollectionListItem(collection, list) {
   });
 
   return item;
+}
+
+async function getCapellaCollections(catalogFragment = "/catalog.json") {
+  try {
+    setLoading(true);
+    const response = await fetch(`${CAPELLA_API_URL}${catalogFragment}`);
+    if (!response.ok) {
+      throw new Error(`Capella API request failed with status ${response.status}`);
+    }
+    const data = await response.json();
+    console.log(data);
+  } catch (error) {
+    console.warn("Error fetching Capella collections");
+    console.error(error);
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function getCapellaCollectionItems(collection) {
 }
 
 // get all collections
@@ -814,96 +840,55 @@ function renderSearchResults() {
 
 }
 
-export async function webTileLayerFromTileJson(tileJsonUrl, options = {}) {
-  const response = await fetch(tileJsonUrl);
+const tokenCache = new Map();
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch TileJSON: ${response.status} ${response.statusText}`);
+async function getToken(collectionTitle) {
+  const cachedToken = tokenCache.get(collectionTitle);
+  if (cachedToken && cachedToken.expires > new Date()) {
+    return cachedToken;
   }
-
-  const tileJson = await response.json();
-
-  if (!Array.isArray(tileJson.tiles) || tileJson.tiles.length === 0) {
-    throw new Error("TileJSON does not contain a tiles array");
-  }
-
-  const url = new URL(tileJson.tiles[0]);
-  const query = new URLSearchParams(url.search);
-  query.delete("color_formula");
-  // https://planetarycomputer.microsoft.com/api/data/v1/item/tiles/WebMercatorQuad/%7Bz%7D/%7Bx%7D/%7By%7D@1x?collection=landsat-c2-l2&item=LC09_L2SR_080068_20260408_02_T2&assets=red&assets=green&assets=blue&format=png
-  // const urlTemplate = `${url.origin}${url.pathname}?${query.toString()}`;
-  // https://planetarycomputer.microsoft.com/api/data/v1/item/tiles/WebMercatorQuad/1/1/1@1x?collection=landsat-c2-l2&item=LC09_L2SR_080074_20260408_02_T1&assets=red&assets=green&assets=blue&color_formula=gamma%2BRGB%2B2.7%2C%2Bsaturation%2B1.5%2C%2Bsigmoidal%2BRGB%2B15%2B0.55&format=png
-  // const urlTemplate = tileJson.tiles[0];
-  const urlTemplate = `${tileJson.tiles[0].split("?")[0]}?${query.toString()}`;
-
-  const layerProps = {
-    urlTemplate,
-    copyright: options.copyright ?? tileJson.attribution ?? tileJson.name,
-    ...options.layerProps,
-    minZoom: tileJson.minzoom,
-    maxZoom: tileJson.maxzoom
-  };
-
-  if (
-    Array.isArray(tileJson.bounds) &&
-    tileJson.bounds.length === 4 &&
-    tileJson.bounds.every(v => typeof v === "number")
-  ) {
-    const [xmin, ymin, xmax, ymax] = tileJson.bounds;
-
-    layerProps.fullExtent = new Extent({
-      xmin,
-      ymin,
-      xmax,
-      ymax,
-      spatialReference: SpatialReference.WGS84
-    });
-  }
-
-  const layer = new WebTileLayer(layerProps);
-  await layer.load();
-  console.log(layer);
-
-  return {
-    layer,
-    tileJson,
-    center: Array.isArray(tileJson.center) ? tileJson.center : null,
-    minZoom: tileJson.minzoom,
-    maxZoom: tileJson.maxzoom
-  };
+  return requestToken(collectionTitle);
 }
 
-async function addWebTileLayer(item) {
-  const url = getItemWebTileJsonUrl(item);
+async function requestToken(collectionTitle) {
+  const url = `${TOKEN_URL}/token/${collectionTitle}`;
+  const response = await fetch(url);
+  const data = await response.json();
 
-  if (!url || !scene.map) {
+  if (!response.ok) {
+    throw new Error(`Token request failed with status ${response.status}: ${data.detail || response.statusText}`);
+  }
+
+  if (!data.token || !data["msft:expiry"]) {
+    throw new Error("Token response is missing required fields");
+  }
+
+  const tokenData = {
+    params: Object.fromEntries(new URLSearchParams(data.token)),
+    expires: new Date(data["msft:expiry"])
+  };
+
+  tokenCache.set(collectionTitle, tokenData);
+  return tokenData;
+}
+
+async function addAssetToMap(item, asset, assetKey) {
+  const imageryUrl = getAssetHref(asset);
+
+  if (!imageryUrl || !scene.map) {
     return null;
   }
 
-  const { layer } = await webTileLayerFromTileJson(url, {
-    layerProps: {
-      title: item.assets?.data?.title || item.id || "STAC web tile"
-    }
+  const token = await getToken(item.collection);
+  const layer = new ImageryTileLayer({
+    url: imageryUrl,
+    customParameters: token.params,
+    title: asset.title || assetKey || item.id || "STAC imagery"
   });
 
-  itemLayerSourceMap.set(layer, url);
+  console.log(layer);
+
+  itemLayerSourceMap.set(layer, imageryUrl);
   scene.map.add(layer);
   return layer;
-}
-
-async function addCogToMap(item) {
-  const layerUrl = getItemImageryLayerUrl(item);
-
-  if (layerUrl && scene.map) {
-    const layer = new ImageryTileLayer({
-      url: layerUrl,
-      title: item.assets?.data?.title || item.id || "STAC imagery"
-    });
-
-    itemLayerSourceMap.set(layer, layerUrl);
-    scene.map.add(layer);
-    return layer;
-  }
-
-  return addWebTileLayer(item);
 }

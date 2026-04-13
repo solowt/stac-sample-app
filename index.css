@@ -16,3 +16,7 @@ calcite-panel[closed] {
   margin: 0 auto 1rem;
   object-fit: contain;
 }
+
+.item-assets-list {
+  margin-top: 1rem;
+}
