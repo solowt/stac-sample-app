@@ -19,12 +19,77 @@
           <div id="item-panel-content"></div>
         </calcite-panel>
         <calcite-panel heading="Search" id="search-panel" closed>
+          <div id="search-panel-content" class="search-panel-content">
+            <calcite-block heading="Collections" open>
+              <calcite-label>
+                Search collections
+                <calcite-combobox
+                  id="search-collections"
+                  clear-disabled
+                  disabled
+                  placeholder="Loading collections"
+                  selection-display="fit"
+                  selection-mode="multiple"
+                ></calcite-combobox>
+              </calcite-label>
+            </calcite-block>
+            
+            <calcite-block heading="Extent" open>
+              <div class="search-extent-row">
+                <calcite-button id="search-draw-extent" appearance="outline" icon-start="selection" width="full">
+                  Draw extent
+                </calcite-button>
+                <calcite-action id="search-clear-extent" icon="trash" text="Clear extent" disabled></calcite-action>
+              </div>
+              <p id="search-extent-summary" class="search-helper-text">No extent drawn.</p>
+            </calcite-block>
+
+            <calcite-block heading="Date Range" open>
+              <div class="search-date-grid">
+                <calcite-label>
+                  Start date
+                  <calcite-input-date-picker id="search-start-date" scale="s"></calcite-input-date-picker>
+                </calcite-label>
+                <calcite-label>
+                  End date
+                  <calcite-input-date-picker id="search-end-date" scale="s"></calcite-input-date-picker>
+                </calcite-label>
+              </div>
+            </calcite-block>
+
+
+            <calcite-block heading="Metadata" open>
+              <calcite-label>
+                Add metadata filters
+                <calcite-combobox
+                  id="search-metadata-picker"
+                  clear-disabled
+                  disabled
+                  placeholder="Loading metadata fields"
+                  selection-display="fit"
+                  selection-mode="multiple"
+                ></calcite-combobox>
+              </calcite-label>
+              <calcite-list id="search-metadata-filters" class="search-metadata-filters" label="Metadata filters"></calcite-list>
+            </calcite-block>
+
+            <div class="search-actions-row">
+              <calcite-button id="search-submit" width="full">Search</calcite-button>
+              <calcite-button id="search-reset" appearance="outline" width="full">Reset</calcite-button>
+            </div>
+
+            <calcite-block heading="Results" open>
+              <p id="search-results-summary" class="search-helper-text">Set filters and run a search.</p>
+              <calcite-list id="search-results-list" label="Search results"></calcite-list>
+              <calcite-pagination id="search-results-pagination" hidden></calcite-pagination>
+            </calcite-block>
+          </div>
         </calcite-panel>
       </calcite-shell-panel>
       <calcite-panel heading="STAC Integration Test App">
-        <arcgis-scene ground="world-elevation" basemap="dark-gray-3d" center="-154.88, 19.46" zoom="15" popup-component-enabled>
+        <arcgis-map basemap="dark-gray" center="-154.88, 19.46" zoom="15" popup-component-enabled>
           <arcgis-layer-list slot="top-right"></arcgis-layer-list>
-        </arcgis-scene>
+        </arcgis-map>
       </calcite-panel>
     </calcite-shell>
   </body>

@@ -17,6 +17,83 @@ calcite-panel[closed] {
   object-fit: contain;
 }
 
-.item-assets-list {
+.item-assets-section {
   margin-top: 1rem;
+}
+
+.item-assets-list {
+  margin-top: 0;
+}
+
+.search-panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.search-panel-content calcite-block {
+  margin: 0;
+}
+
+.search-extent-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.search-date-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.search-helper-text {
+  margin: 0.75rem 0 0;
+  color: var(--calcite-color-text-3);
+  font-size: 0.875rem;
+}
+
+.search-actions-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.search-metadata-filters:empty,
+.search-results-list:empty {
+  display: none;
+}
+
+.search-metadata-field {
+  margin-top: 0.75rem;
+}
+
+.search-metadata-field-row {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.search-metadata-field-row-with-operator {
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+}
+
+.search-metadata-field calcite-input,
+.search-metadata-field calcite-input-date-picker,
+.search-metadata-field calcite-input-number,
+.search-metadata-field calcite-select {
+  width: 100%;
+}
+
+#search-results-pagination {
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .search-actions-row {
+    grid-template-columns: 1fr;
+  }
+
+  .search-metadata-field-row-with-operator {
+    grid-template-columns: 1fr;
+  }
 }
