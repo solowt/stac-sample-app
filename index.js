@@ -19,10 +19,13 @@ const searchResultsPagination = document.getElementById("search-results-paginati
 const searchSubmitButton = document.getElementById("search-submit");
 const searchResetButton = document.getElementById("search-reset");
 const actionsStart = shellcollectionsPanel?.querySelectorAll("calcite-action");
+const layerListEl = document.querySelector("arcgis-layer-list");
 
 const backPanelMap = new Map();
 const collectionItemStateMap = new WeakMap();
 const itemLayerSourceMap = new WeakMap();
+const imageryLayerPresentationMap = new WeakMap();
+const layerListActionMap = new Map();
 const baseCollectionsPanelHeading = collectionsPanel.heading;
 
 function showStartPanel(panelToShow, sourcePanel) {
@@ -93,9 +96,29 @@ function setLoading(isLoading) {
 // JSAPI imports & set up
 
 const sceneEl = document.querySelector("arcgis-map");
-const [ImageryTileLayer, WebTileLayer, Extent, Graphic, GraphicsLayer, SketchViewModel, webMercatorUtils] = await $arcgis.import([
+const [
+  ActionButton,
+  Collection,
+  ImageryTileLayer,
+  RasterFunction,
+  WebTileLayer,
+  classBreaksRendererCreator,
+  shadedReliefRendererCreator,
+  stretchRendererCreator,
+  Extent,
+  Graphic,
+  GraphicsLayer,
+  SketchViewModel,
+  webMercatorUtils
+] = await $arcgis.import([
+  "@arcgis/core/support/actions/ActionButton.js",
+  "@arcgis/core/core/Collection.js",
   "@arcgis/core/layers/ImageryTileLayer.js",
+  "@arcgis/core/layers/support/RasterFunction.js",
   "@arcgis/core/layers/WebTileLayer.js",
+  "@arcgis/core/smartMapping/raster/renderers/classBreaks.js",
+  "@arcgis/core/smartMapping/raster/renderers/shadedRelief.js",
+  "@arcgis/core/smartMapping/raster/renderers/stretch.js",
   "@arcgis/core/geometry/Extent.js",
   "@arcgis/core/Graphic.js",
   "@arcgis/core/layers/GraphicsLayer.js",
@@ -104,6 +127,12 @@ const [ImageryTileLayer, WebTileLayer, Extent, Graphic, GraphicsLayer, SketchVie
 ]);
 await sceneEl.viewOnReady();
 const scene = sceneEl.view;
+
+if (layerListEl) {
+  layerListEl.listItemCreatedFunction = defineLayerListItemActions;
+  layerListEl.addEventListener("arcgisTriggerAction", handleLayerListActionTrigger);
+}
+
 const searchExtentLayer = new GraphicsLayer({
   listMode: "hide",
   title: "Search extent"
@@ -179,6 +208,182 @@ const searchResultsState = {
   isLoading: false,
   pages: []
 };
+const IMAGERY_LAYER_LIST_ACTIONS = Object.freeze([
+  { key: "default", title: "Default", icon: "undo" },
+  { key: "classify", title: "Classify", icon: "sliders-horizontal" },
+  { key: "shaded-relief", title: "Shaded relief", icon: "sliders-horizontal" },
+  { key: "slope", title: "Slope", icon: "sliders-horizontal" },
+  { key: "stretch", title: "Stretch", icon: "sliders-horizontal" }
+]);
+const IMAGERY_LAYER_ACTION_SEPARATOR = "::";
+
+function cloneLayerPresentationValue(value) {
+  return value?.clone ? value.clone() : value ?? null;
+}
+
+function getImageryLayerPresentationState(layer) {
+  let state = imageryLayerPresentationMap.get(layer);
+
+  if (!state) {
+    state = {
+      baseRasterFunction: cloneLayerPresentationValue(layer.rasterFunction),
+      baseRenderer: cloneLayerPresentationValue(layer.renderer)
+    };
+    imageryLayerPresentationMap.set(layer, state);
+  }
+
+  return state;
+}
+
+function resetImageryLayerPresentation(layer) {
+  const { baseRasterFunction, baseRenderer } = getImageryLayerPresentationState(layer);
+  const rasterFunction = cloneLayerPresentationValue(baseRasterFunction);
+  const renderer = cloneLayerPresentationValue(baseRenderer);
+
+  layer.rasterFunction = rasterFunction;
+  layer.renderer = renderer;
+
+  return {
+    rasterFunction,
+    renderer
+  };
+}
+
+function createImageryLayerActionId(layer, actionName) {
+  return `${layer.uid}${IMAGERY_LAYER_ACTION_SEPARATOR}${actionName}`;
+}
+
+function createImageryLayerActionButton(layer, actionDefinition) {
+  const id = createImageryLayerActionId(layer, actionDefinition.key);
+
+  layerListActionMap.set(id, {
+    actionName: actionDefinition.key,
+    layer
+  });
+
+  return new ActionButton({
+    id,
+    icon: actionDefinition.icon,
+    title: actionDefinition.title
+  });
+}
+
+function defineLayerListItemActions(event) {
+  const { item } = event;
+
+  if (!(item?.layer instanceof ImageryTileLayer)) {
+    return;
+  }
+
+  item.actionsSections = new Collection([
+    new Collection(
+      IMAGERY_LAYER_LIST_ACTIONS.map(actionDefinition => createImageryLayerActionButton(item.layer, actionDefinition))
+    )
+  ]);
+}
+
+function createSlopeRasterFunction() {
+  return new RasterFunction({
+    functionName: "Slope",
+    functionArguments: {
+      DEM: "$$",
+      SlopeType: 1,
+      ZFactor: 1
+    },
+    outputPixelType: "f32",
+    variableName: "DEM"
+  });
+}
+
+async function applyClassifyRenderer(layer) {
+  const { rasterFunction } = resetImageryLayerPresentation(layer);
+  const { renderer } = await classBreaksRendererCreator.createRenderer({
+    classificationMethod: "natural-breaks",
+    layer,
+    numClasses: 5,
+    rasterFunction: rasterFunction || undefined
+  });
+
+  layer.renderer = renderer;
+}
+
+async function applyShadedReliefRenderer(layer) {
+  const { rasterFunction } = resetImageryLayerPresentation(layer);
+  const { renderer } = await shadedReliefRendererCreator.createRenderer({
+    hillshadeType: "traditional",
+    layer,
+    rasterFunction: rasterFunction || undefined
+  });
+
+  layer.renderer = renderer;
+}
+
+async function applyStretchRenderer(layer) {
+  const { rasterFunction } = resetImageryLayerPresentation(layer);
+  const { renderer } = await stretchRendererCreator.createRenderer({
+    bandId: 0,
+    dynamicRangeAdjustment: true,
+    estimateStatistics: true,
+    gamma: 1.15,
+    layer,
+    rasterFunction: rasterFunction || undefined,
+    stretchType: "min-max",
+    useGamma: true
+  });
+
+  layer.renderer = renderer;
+}
+
+async function applySlopeRasterFunction(layer) {
+  resetImageryLayerPresentation(layer);
+  layer.rasterFunction = createSlopeRasterFunction();
+}
+
+async function applyDefaultRenderer(layer) {
+  resetImageryLayerPresentation(layer);
+}
+
+async function applyImageryLayerAction(layer, actionName) {
+  switch (actionName) {
+    case "default":
+      await applyDefaultRenderer(layer);
+      return;
+    case "classify":
+      await applyClassifyRenderer(layer);
+      return;
+    case "shaded-relief":
+      await applyShadedReliefRenderer(layer);
+      return;
+    case "slope":
+      await applySlopeRasterFunction(layer);
+      return;
+    case "stretch":
+      await applyStretchRenderer(layer);
+      return;
+    default:
+      return;
+  }
+}
+
+async function handleLayerListActionTrigger(event) {
+  const action = event.detail?.action;
+  const actionContext = layerListActionMap.get(action?.id);
+
+  if (!action || !actionContext?.layer) {
+    return;
+  }
+
+  action.disabled = true;
+
+  try {
+    await actionContext.layer.when();
+    await applyImageryLayerAction(actionContext.layer, actionContext.actionName);
+  } catch (error) {
+    console.error(`Unable to apply ${actionContext.actionName} styling to \"${actionContext.layer.title || "Imagery layer"}\".`, error);
+  } finally {
+    action.disabled = false;
+  }
+}
 
 function truncateText(text, maxLength) {
   if (!text) {
